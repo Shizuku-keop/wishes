@@ -1,4 +1,9 @@
 {
+  "locale": {
+    "zh-CN": "简体中文",
+    "en": "English",
+    "ja": "日本語"
+  },
   "common": {
     "loading": "Loading…",
     "open": "Open",
