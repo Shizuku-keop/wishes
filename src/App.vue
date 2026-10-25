@@ -7,7 +7,7 @@
  * - 卡池标签栏的滚动定位
  */
 
-import { computed, defineAsyncComponent, nextTick, ref, watch, watchEffect } from "vue";
+import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import BottomNav from "./components/BottomNav.vue";
 import { useWish } from "./composables/useWish";
 import { pickLocalized } from "./composables/useLocaleText.ts";
