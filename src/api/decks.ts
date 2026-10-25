@@ -36,6 +36,7 @@ export interface DeckSummary {
   global_id: string,
   origin: Origin,
   forked_from?: string,
+  forked_from_name?: LocalizedString,
   name: LocalizedString,
   assets?: DeckAssets,
   members: Membership,

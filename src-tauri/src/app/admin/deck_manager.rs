@@ -9,7 +9,7 @@
 //!   注意卡池 (`Banner.deck_id`) 对卡组的引用**不会**被自动重写 ——
 //!   一个卡组可能被多个卡池引用, 静默改写会同时改变多个卡池的行为.
 
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+use std::{cmp::Reverse, collections::HashMap, fs, path::PathBuf, sync::Arc};
 use anyhow::{Context, Result};
 use crate::{app::validation, domain::{deck::{Deck, EventGroup, Membership, TaggedDeck}, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::{EventTag, Tag, Tagged}}, infrastructure::registry::{BannerRegistry, CardRegistry, DeckRegistry, LogicRegistry}, utils::{data_paths::DataPaths, path::atomic_write_json}};
 
@@ -57,7 +57,9 @@ impl DeckManager {
 
     /// 获取所有可见卡组.
     pub fn list_all(&self) -> Vec<Arc<TaggedDeck>> {
-        self.deck_registry.all_visible()
+        let mut decks = self.deck_registry.all_visible();
+        decks.sort_by_key(|d| Reverse(d.global_id));    // 反转排序, 使最新创建的对象在前
+        decks
     }
 
     /// 通过标签获取筛选后的可见卡组.
@@ -219,6 +221,14 @@ impl DeckManager {
     /// 若卡组被卡池引用, 拒绝删除.
     /// 若删除的是派生对象, 其"原对象"立即重新可见 (恢复官方版本).
     pub fn delete_deck(&self, id: GlobalId) -> Result<()> {
+        let derived = self.deck_registry.derived_of(id);
+        if !derived.is_empty() {
+            anyhow::bail!(
+                "Deck {} 存在派生对象 {:?}, 请先删除派生对象再删除原卡组",
+                id, derived.iter().map(|d| d.to_string()).collect::<Vec<_>>()
+            );
+        }
+
         let affected_banners = self.banner_registry.find_banners_by_deck(id);
         if !affected_banners.is_empty() {
             tracing::warn!(

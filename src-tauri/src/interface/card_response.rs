@@ -5,7 +5,7 @@
 //! 由前端按当前界面语言回退解析.
 
 use serde::{Deserialize, Serialize};
-use crate::domain::{card::{CardAssets, TaggedCard}, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::Tag};
+use crate::{domain::{card::{CardAssets, TaggedCard}, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::Tag}, infrastructure::registry::CardRegistry};
 
 
 /// 卡片摘要, 用于列表与详情展示.
@@ -19,6 +19,9 @@ pub struct CardSummary {
 
     /// 派生自哪个对象的 `global_id`.
     pub forked_from: Option<GlobalId>,
+
+    /// 所派生的原对象的名称, 用于显示 (多语言).
+    pub forked_from_name: Option<LocalizedString>,
 
     /// 卡片内容 (多语言).
     pub content: LocalizedString,
@@ -39,10 +42,24 @@ impl From<&TaggedCard> for CardSummary {
             global_id: card.global_id,
             origin: card.origin.clone(),
             forked_from: card.forked_from,
+            forked_from_name: None,
             content: card.content.clone(),
             title: card.title.clone(),
             assets: card.assets.clone(),
             tags: card.sorted_tags(),
+        }
+    }
+}
+
+
+impl CardSummary {
+    pub fn from_with_registry(card: &TaggedCard, registry: &CardRegistry) -> Self {
+        let forked_from_name = card.forked_from
+            .and_then(|id| registry.get_including_shadowed(id))
+            .map(|c| c.content.clone());
+        Self {
+            forked_from_name,
+            ..Self::from(card)
         }
     }
 }

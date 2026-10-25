@@ -28,10 +28,21 @@ export function allLocalizedValues(text?: LocalizedString): string[] {
   return Object.values(text).filter(v => v.length > 0);
 }
 
-/** 展示用短标识: Uuid 的前 8 位 (如 `0192a3c4`). */
+/**
+ * 展示用短标识: Uuid 的后 8 位.
+ * 正常情况不应使用本函数, 本函数仅用于部分情况下的回退显示.
+*/
 export function shortGlobalId(globalId?: string): string {
   if (!globalId) return '';
-  return globalId.replace(/-/g, '').slice(0, 8);
+  return globalId.replace(/-/g, '').slice(-8);
+}
+
+/** 对象来源本地化展示 */
+export function originLabel(t: (k: string, p?: any) => string, origin: string): string {
+  if (origin.startsWith('pack:')) {
+    return t('origin.pack', { name: origin.slice(5) });
+  }
+  return t(`origin.${origin}`);   // official / local
 }
 
 /**
@@ -61,7 +72,8 @@ export function useLocaleText() {
     pick,
     pickLocalized,
     currentLocale,
-    shortGlobalId
+    shortGlobalId,
+    originLabel
   };
 }
 

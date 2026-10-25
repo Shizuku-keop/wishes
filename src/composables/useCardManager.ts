@@ -8,6 +8,8 @@ import { allLocalizedValues, pickLocalized, useLocaleText } from "./useLocaleTex
 export function useCardManager() {
   const cards = ref<CardSummary[]>([]);
   const loading = ref(false);
+
+  /** 只保存 `loadCards` 的失败信息 */
   const error = ref<string | null>(null);
 
   const { t } = useI18n();
@@ -50,14 +52,10 @@ export function useCardManager() {
 
   async function create(req: CardCreateRequest): Promise<CardSummary | null> {
     loading.value = true;
-    error.value = null;
     try {
       const newCard = await createCard(req);
       cards.value.unshift(newCard);
       return newCard;
-    } catch (e) {
-      error.value = t("card.createFailed", { error: e });
-      return null;
     } finally {
       loading.value = false;
     }
@@ -65,7 +63,6 @@ export function useCardManager() {
 
   async function update(req: CardUpdateRequest): Promise<CardSummary | null> {
     loading.value = true;
-    error.value = null;
     try {
       const updated = await updateCard(req);
       const index = cards.value.findIndex(c => c.global_id === req.global_id);
@@ -76,25 +73,17 @@ export function useCardManager() {
         cards.value.unshift(updated);
       }
       return updated;
-    } catch (e) {
-      error.value = t("card.updateFailed", { error: e });
-      return null;
     } finally {
       loading.value = false;
     }
   }
 
-  async function remove(globalId: string): Promise<boolean> {
+  async function remove(globalId: string): Promise<void> {
     loading.value = true;
-    error.value = null;
     try {
       await deleteCard(globalId);
-      cards.value = cards.value.filter(c => c.global_id !== globalId);
-      return true;
-    } catch (e) {
-      error.value = t("card.deleteError", { error: e });
-      return false;
-    } finally {
+      await loadCards();    // 重新拉取, 在删除派生对象时让原对象重新显示
+    } finally {             // 错误继续上抛, 由调用方处理
       loading.value = false;
     }
   }

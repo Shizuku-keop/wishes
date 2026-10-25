@@ -92,7 +92,8 @@ export function useDeckManager() {
     error.value = null;
     try {
       await deleteDeck(globalId);
-      decks.value = decks.value.filter(d => d.global_id !== globalId);
+      await loadDecks();
+      // decks.value = decks.value.filter(d => d.global_id !== globalId);
       return true;
     } catch (e) {
       error.value = t("deck.deleteError", { error: e });

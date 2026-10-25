@@ -12,7 +12,7 @@
 //! - 所有显式引用该卡片的卡组 (`include_ids` / `exclude_ids`) 会在分叉时
 //!   **一次性重写**为指向派生对象.
 
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{cmp::Reverse, fs, path::PathBuf, sync::Arc};
 use anyhow::{Context, Result};
 use crate::{domain::{card::{Card, TaggedCard}, deck::TaggedDeck, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::Tag}, infrastructure::registry::{CardRegistry, DeckRegistry}, utils::{data_paths::DataPaths, path::atomic_write_json}};
 
@@ -51,7 +51,9 @@ impl CardManager {
 
     /// 获取所有**可见**卡片的 `Arc` 引用.
     pub fn list_all(&self) -> Vec<Arc<TaggedCard>> {
-        self.card_registry.all_visible()
+        let mut cards = self.card_registry.all_visible();
+        cards.sort_by_key(|c| Reverse(c.global_id));    // 反转排序, 使最新创建的对象在前
+        cards
     }
 
     /// 通过标签获取筛选后的**可见**卡片的 `Arc` 引用.
@@ -246,6 +248,22 @@ impl CardManager {
     /// 
     /// 若删除的是派生对象, 其"原对象"立即重新可见 (恢复官方版本).
     pub fn delete_card(&self, id: GlobalId) -> Result<()> {
+        let derived = self.card_registry.derived_of(id);
+        if !derived.is_empty() {
+            anyhow::bail!(
+                "Card {} 存在派生对象 {:?}, 需先删除派生对象后才能删除原卡片",
+                id,
+                derived.iter().map(|d| d.to_string()).collect::<Vec<_>>()
+            );
+        }
+
+        let card = self.card_registry.get_including_shadowed(id)
+            .ok_or_else(|| anyhow::anyhow!("Card {} 不存在", id))?;
+
+        let source_id = card.forked_from;
+        let is_fork = source_id.is_some();
+        drop(card);     // 释放读锁
+
         // 被 Deck 显式引用时记录警告 (不阻止删除)
         let mut included_in = Vec::new();
         let mut excluded_in = Vec::new();
@@ -256,19 +274,31 @@ impl CardManager {
             if refs.excluded { excluded_in.push(deck.global_id.to_string()); }
         }
 
-        if !included_in.is_empty() {
-            tracing::warn!(
-                card_id = %id,
-                decks = ?included_in,
-                "Card 被 Deck 显式 Include, 删除后相关卡组将不再包含该卡片"
-            )
-        }
-        if !excluded_in.is_empty() {
-            tracing::warn!(
-                card_id = %id,
-                decks = ?excluded_in,
-                "Card 被 Deck 显式 Exclude, 删除后该 ExcludeIds 规则将指向不存在的卡片"
-            )
+        if is_fork {
+            if !included_in.is_empty() || !excluded_in.is_empty() {
+                tracing::info!(
+                    card_id = %id,
+                    source = %source_id.unwrap(),
+                    included_in = ?included_in,
+                    excluded_in = ?excluded_in,
+                    "删除派生 Card: 显式引用将重写回原对象, 卡组内容不丢失"
+                );
+            }
+        } else {
+            if !included_in.is_empty() {
+                tracing::warn!(
+                    card_id = %id,
+                    decks = ?included_in,
+                    "Card 被 Deck 显式 Include, 删除后相关卡组将不再包含该卡片"
+                )
+            }
+            if !excluded_in.is_empty() {
+                tracing::warn!(
+                    card_id = %id,
+                    decks = ?excluded_in,
+                    "Card 被 Deck 显式 Exclude, 删除后该 ExcludeIds 规则将指向不存在的卡片"
+                )
+            }
         }
 
         if let Some(path) = self.card_registry.get_path(id) {
@@ -282,8 +312,27 @@ impl CardManager {
 
         // 分叉关系的解除已在 CardRegistry 中处理, 此处无需考虑
 
-        tracing::info!(card_id = %id.0, "删除 Card");
+        // 反向重写引用, 把派生对象的引用改回原对象
+        if let Some(source) = source_id {
+            if self.card_registry.contains_including_shadowed(source) {
+                let rewritten = self.redirect_card_references(id, source);
+                if rewritten > 0 {
+                    tracing::info!(
+                        derived = %id, source = %source, rewritten,
+                        "删除派生 Card: 已将引用反向重写为原对象"
+                    )
+                }
+            } else {
+                tracing::warn!(
+                    derived = %id, source = %source,
+                    "删除派生 Card: 原对象已不存在, 跳过引用反向重写"
+                )
+            }
+        }
 
+        // TODO[2026-10-14]: loader.rs 加载时可遍历检查所有派生对象的 forked_from 是否存在并记录警告
+
+        tracing::info!(card_id = %id.0, "删除 Card");
         Ok(())
     }
 

@@ -153,7 +153,7 @@ fn open_log_dir(handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn list_cards(state: State<AppState>) -> Result<Vec<CardSummary>, String> {
     let cards = state.card_manager.list_all();
-    Ok(cards.iter().map(|card| CardSummary::from(card.as_ref())).collect())
+    Ok(cards.iter().map(|card| CardSummary::from_with_registry(card.as_ref(), &state.card_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
@@ -180,7 +180,7 @@ fn update_card(req: CardUpdateRequest, state: State<AppState>) -> Result<CardSum
         req.tags,
         req.title,
     ).map_err(|e| log_command_err("update_card", e))?;
-    Ok(CardSummary::from(&card))
+    Ok(CardSummary::from_with_registry(&card, &state.card_registry))
 }
 
 /// 删除卡片.
@@ -203,7 +203,7 @@ fn get_card_referencing_decks(global_id: GlobalId, state: State<AppState>) -> Re
 #[tauri::command]
 fn list_decks(state: State<AppState>) -> Result<Vec<DeckSummary>, String> {
     let decks = state.deck_manager.list_all();
-    Ok(decks.iter().map(|d| DeckSummary::from(d.as_ref())).collect())
+    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(d.as_ref(), &state.deck_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
@@ -221,7 +221,6 @@ fn create_deck(req: CreateDeckRequest, state: State<AppState>) -> Result<DeckSum
     Ok(DeckSummary::from(&deck))
 }
 
-
 /// 更新卡组.
 /// 
 /// 若目标卡组来自只读来源 (官方 / 拓展包), 该操作会分叉出一个本地副本,
@@ -235,7 +234,7 @@ fn update_deck(req: UpdateDeckRequest, state: State<AppState>) -> Result<DeckSum
         req.event_groups,
         req.tags
     ).map_err(|e| log_command_err("update_deck", e))?;
-    Ok(DeckSummary::from(&deck))
+    Ok(DeckSummary::from_with_registry(&deck, &state.deck_registry))
 }
 
 /// 删除卡组.

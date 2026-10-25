@@ -8,6 +8,7 @@ export interface CardSummary {
   global_id: string,
   origin: Origin,
   forked_from?: string,
+  forked_from_name?: LocalizedString,
   content: LocalizedString,
   title?: LocalizedString,
   assets?: CardAssets,
