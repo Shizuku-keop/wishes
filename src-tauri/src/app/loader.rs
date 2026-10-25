@@ -119,10 +119,10 @@ impl Loader {
         // 4. 卡池
         let banner_registry = BannerRegistry::new();
         let mut seen_banners = HashSet::new();
-        self.for_each_source(paths, "logic", |origin, path| {
+        self.for_each_source(paths, "banners", |origin, path| {
             let banner: TaggedBanner = Self::read_json(path, "Banner")?;
             Self::bind_origin(&banner.origin, origin, banner.global_id, "Banner", path)?;
-            Self::check_unique(&mut seen_banners, banner.logic_id, "Banner", path)?;
+            Self::check_unique(&mut seen_banners, banner.global_id, "Banner", path)?;
 
             Self::check_banner_references(&banner, &deck_registry, &logic_registry, path)?;
             Self::check_banner_coverage(&banner, &card_registry, &deck_registry, &logic_registry, path)?;

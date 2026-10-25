@@ -22,6 +22,15 @@ pub struct Card {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forked_from: Option<GlobalId>,
 
+    /// 派生对象是否遮蔽其原对象.
+    /// 
+    /// - `true` (默认): 原对象在列表与抽卡查询中被跳过.
+    /// - `false`: 原对象仍可见, 用户可以同时看到原对象与派生对象.
+    /// 
+    /// 对 `forked_from = None` 的对象该字段无意义.
+    #[serde(default = "crate::domain::helpers::default_true", skip_serializing_if = "crate::domain::helpers::is_true")]
+    pub shadowed: bool,
+
     /// 卡片主内容 (至少一种语言).
     pub content: LocalizedString,
 
@@ -41,6 +50,7 @@ impl Card {
             global_id: GlobalId::new(),
             origin: Origin::Local,
             forked_from: None,
+            shadowed: true,
             content,
             title: None,
             assets: None,

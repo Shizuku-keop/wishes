@@ -93,17 +93,11 @@ impl MembershipCondition {
 }
 
 /// 卡组成员规则, 每个条件顺序应用.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Membership {
     /// 按顺序应用的条件列表.
     #[serde(default)]
     pub conditions: Vec<MembershipCondition>,
-}
-
-impl Default for Membership {
-    fn default() -> Self {
-        Self { conditions: Vec::new() }
-    }
 }
 
 impl Membership {
@@ -216,7 +210,7 @@ pub enum EventGroupCondition {
 }
 
 /// 活动标签分组.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventGroup {
     /// 按顺序应用的条件列表.
     #[serde(default)]
@@ -238,12 +232,6 @@ impl EventGroupCondition {
         } else {
             false
         }
-    }
-}
-
-impl Default for EventGroup {
-    fn default() -> Self {
-        Self { conditions: Vec::new() }
     }
 }
 
@@ -339,6 +327,15 @@ pub struct Deck {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forked_from: Option<GlobalId>,
 
+    /// 派生对象是否遮蔽其原对象.
+    /// 
+    /// - `true` (默认): 原对象在列表与抽卡查询中被跳过.
+    /// - `false`: 原对象仍可见, 用户可以同时看到原对象与派生对象.
+    /// 
+    /// 对 `forked_from = None` 的对象该字段无意义.
+    #[serde(default = "crate::domain::helpers::default_true", skip_serializing_if = "crate::domain::helpers::is_true")]
+    pub shadowed: bool,
+
     /// 卡组名称.
     pub name: LocalizedString,
 
@@ -362,6 +359,7 @@ impl Deck {
             global_id: GlobalId::new(),
             origin: Origin::Local,
             forked_from: None,
+            shadowed: true,
             name,
             assets: None,
             members: Membership::default(),

@@ -5,7 +5,7 @@
 //! 由前端按当前界面语言回退解析.
 
 use serde::{Deserialize, Serialize};
-use crate::domain::{card::{CardAssets, TaggedCard}, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::Tag};
+use crate::{domain::{card::{CardAssets, TaggedCard}, ids::GlobalId, localized_string::LocalizedString, origin::Origin, tag::Tag}, infrastructure::registry::CardRegistry};
 
 
 /// 卡片摘要, 用于列表与详情展示.
@@ -19,6 +19,16 @@ pub struct CardSummary {
 
     /// 派生自哪个对象的 `global_id`.
     pub forked_from: Option<GlobalId>,
+
+    /// 所派生的原对象的名称, 用于显示 (多语言).
+    pub forked_from_name: Option<LocalizedString>,
+
+    /// 在对象为派生对象时, 对象是否对原对象遮蔽.
+    pub shadowed: bool,
+
+    /// 若具有派生对象 (自身为原对象), 保存派生对象的 `global_id`.
+    /// 仅用于让前端知道对象是否被派生.
+    pub derived_id: Option<GlobalId>,
 
     /// 卡片内容 (多语言).
     pub content: LocalizedString,
@@ -39,10 +49,32 @@ impl From<&TaggedCard> for CardSummary {
             global_id: card.global_id,
             origin: card.origin.clone(),
             forked_from: card.forked_from,
+            forked_from_name: None,
+            derived_id: None,
+            shadowed: card.shadowed,
             content: card.content.clone(),
             title: card.title.clone(),
             assets: card.assets.clone(),
             tags: card.sorted_tags(),
+        }
+    }
+}
+
+
+impl CardSummary {
+    pub fn from_with_registry(card: &TaggedCard, registry: &CardRegistry) -> Self {
+        let forked_from_name = card.forked_from
+            .and_then(|id| registry.get_including_shadowed(id))
+            .map(|c| c.content.clone());
+
+        let mut derived = registry.derived_of(card.global_id);
+        derived.sort();
+        let derived_id = derived.first().copied();
+
+        Self {
+            forked_from_name,
+            derived_id,
+            ..Self::from(card)
         }
     }
 }
@@ -86,4 +118,8 @@ pub struct CardUpdateRequest {
     /// 新的卡片标签.
     #[serde(default)]
     pub tags: Vec<Tag>,
+
+    /// 是否遮蔽.
+    #[serde(default)]
+    pub shadow: Option<bool>,
 }
