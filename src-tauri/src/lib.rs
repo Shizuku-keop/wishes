@@ -153,14 +153,15 @@ fn open_log_dir(handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn list_cards(state: State<AppState>) -> Result<Vec<CardSummary>, String> {
     let cards = state.card_manager.list_all();
-    Ok(cards.iter().map(|card| CardSummary::from_with_registry(card.as_ref(), &state.card_registry)).collect())
+    Ok(cards.iter().map(|card| CardSummary::from_with_registry(&card, &state.card_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
+/// 目前前端实际未使用.
 #[tauri::command]
 fn list_cards_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<CardSummary>, String> {
     let cards = state.card_manager.list_by_tags(&tags);
-    Ok(cards.iter().map(|card| CardSummary::from(card.as_ref())).collect())
+    Ok(cards.iter().map(|card| CardSummary::from_with_registry(&card, &state.card_registry)).collect())
 }
 
 /// 创建新的卡片.
@@ -168,7 +169,7 @@ fn list_cards_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<Card
 fn create_card(req: CardCreateRequest, state: State<AppState>) -> Result<CardSummary, String> {
     let card = state.card_manager.create_card(req.content, req.tags, req.title)
         .map_err(|e| log_command_err("create_card", e))?;
-    Ok(CardSummary::from(&card))
+    Ok(CardSummary::from_with_registry(&card, &state.card_registry))
 }
 
 /// 更新卡片信息.
@@ -179,6 +180,7 @@ fn update_card(req: CardUpdateRequest, state: State<AppState>) -> Result<CardSum
         req.content,
         req.tags,
         req.title,
+        req.shadow,
     ).map_err(|e| log_command_err("update_card", e))?;
     Ok(CardSummary::from_with_registry(&card, &state.card_registry))
 }
@@ -188,6 +190,14 @@ fn update_card(req: CardUpdateRequest, state: State<AppState>) -> Result<CardSum
 fn delete_card(global_id: GlobalId, state: State<AppState>) -> Result<(), String> {
     state.card_manager.delete_card(global_id).map_err(|e| log_command_err("delete_card", e))?;
     Ok(())
+}
+
+/// 手动设置派生卡片是否遮蔽.
+#[tauri::command]
+fn set_card_shadow(global_id: GlobalId, shadowed: bool, state: State<AppState>) -> Result<CardSummary, String> {
+    let card = state.card_manager.set_shadow(global_id, shadowed)
+        .map_err(|e| log_command_err("set_card_shadow", e))?;
+    Ok(CardSummary::from_with_registry(&card, &state.card_registry))
 }
 
 /// 获取显式引用指定卡片的卡组列表.
@@ -203,14 +213,14 @@ fn get_card_referencing_decks(global_id: GlobalId, state: State<AppState>) -> Re
 #[tauri::command]
 fn list_decks(state: State<AppState>) -> Result<Vec<DeckSummary>, String> {
     let decks = state.deck_manager.list_all();
-    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(d.as_ref(), &state.deck_registry)).collect())
+    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(&d, &state.deck_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
 #[tauri::command]
 fn list_decks_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<DeckSummary>, String> {
     let decks = state.deck_manager.list_by_tags(&tags);
-    Ok(decks.iter().map(|d| DeckSummary::from(d.as_ref())).collect())
+    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(&d, &state.deck_registry)).collect())
 }
 
 /// 创建新卡组.
@@ -218,7 +228,7 @@ fn list_decks_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<Deck
 fn create_deck(req: CreateDeckRequest, state: State<AppState>) -> Result<DeckSummary, String> {
     let deck = state.deck_manager.create_deck(req.name, req.members, req.event_groups, req.tags)
         .map_err(|e| log_command_err("create_deck", e))?;
-    Ok(DeckSummary::from(&deck))
+    Ok(DeckSummary::from_with_registry(&deck, &state.deck_registry))
 }
 
 /// 更新卡组.
@@ -290,6 +300,7 @@ pub fn run() {
             create_card,
             update_card,
             delete_card,
+            set_card_shadow,
             get_card_referencing_decks,
             list_decks,
             list_decks_by_tags,

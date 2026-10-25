@@ -21,7 +21,8 @@ const {
   loadCards,
   create,
   update,
-  remove
+  remove,
+  toggleShadow,
 } = useCardManager();
 
 const message = useMessage();
@@ -41,6 +42,8 @@ const formData = ref<CardCreateRequest>({
   title: {},
   tags: []
 })
+
+const shadowSource = ref(true);
 
 const formValid = ref(false);
 
@@ -113,10 +116,33 @@ function openCreateModal() {
   formData.value = { content: {}, title: {}, tags: [] };
   formValid.value = false;
   showModal.value = true;
+  shadowSource.value = true;
 }
 
-
 function openEditModal(card: CardSummary) {
+  // 只读来源且有派生 → 引导编辑派生
+  if (card.derived_id) {
+    dialog.warning({
+      title: t('card.derivedExistsTitle'),
+      content: t('card.derivedExistsContent', { name: displayContent(card) }),
+      positiveText: t('card.editDerivedAction'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => {
+        const derived = cards.value.find(c => c.global_id === card.derived_id);
+        if (derived) {
+          selectCard(derived);
+          doOpenEditModal(derived);
+        } else {
+          message.warning(t('card.derivedNotFound'));
+        }
+      },
+    });
+    return;
+  }
+  doOpenEditModal(card);
+}
+
+function doOpenEditModal(card: CardSummary) {
   isEditMode.value = true;
   editingCard.value = card;
   formData.value = {
@@ -126,6 +152,7 @@ function openEditModal(card: CardSummary) {
   };
   formValid.value = Object.values(card.content).some(v => v.trim().length > 0);
   showModal.value = true;
+  shadowSource.value = true;
 }
 
 function closeModal() {
@@ -149,22 +176,31 @@ async function handleSave() {
         content: formData.value.content,
         title: formData.value.title,
         tags: formData.value.tags,
+        shadow: shadowSource.value,
       }
       const result = await update(req);
-      if (result) {
-        closeModal();
-        selectCard(result);  // 分叉 / 原地修改都再次选中返回的新对象
-      }
+      closeModal();
+      const refreshed = cards.value.find(c => c.global_id === result?.global_id);
+      selectCard(refreshed ?? result);
     } else {
       const result = await create(formData.value);
-      if (result) {
-        closeModal();
-        selectCard(result);
-      }
+      closeModal();
+      selectCard(result);
     }
   } catch (e) {
     message.error(t(isEditMode.value ? "card.updateFailed" : "card.createFailed", { error: e }));
   }
+}
+
+async function toggleShadowAction(card: CardSummary) {
+    try {
+        const updated = await toggleShadow(card.global_id, !card.shadowed);
+        message.success(t(updated.shadowed ? 'card.shadowEnabled' : 'card.shadowDisabled'));
+        const refreshed = cards.value.find(c => c.global_id === updated.global_id);
+        if (refreshed) selectCard(refreshed);
+    } catch (e) {
+        message.error(String(e));
+    }
 }
 
 async function confirmDelete(card: CardSummary) {
@@ -396,6 +432,14 @@ const selectedCardTagClasses = computed(() => {
               {{ t('card.forkEditHint') }}
             </span>
           </div>
+          <div v-if="selectedCard.forked_from" class="shadow-status">
+            <span class="shadow-badge" :class="selectedCard.shadowed ? 'shadow-on' : 'shadow-off'">
+              {{ selectedCard.shadowed ? t('card.shadowedYes') : t('card.shadowedNo') }}
+            </span>
+            <button class="btn-toggle-shadow" @click="toggleShadowAction(selectedCard)">
+              {{ selectedCard.shadowed ? t('card.unshadowAction') : t('card.shadowAction') }}
+            </button>
+          </div>
           <div class="detail-tags">
             <span
               v-for="(tag, index) in selectedCard.tags"
@@ -407,7 +451,17 @@ const selectedCardTagClasses = computed(() => {
             </span>
           </div>
           <div class="detail-actions">
-            <button class="btn-detail-edit" @click="openEditModal(selectedCard)">{{ t('card.edit') }}</button>
+            <button
+              v-if="selectedCard.derived_id"
+              class="btn-detail-edit"
+              @click="openEditModal(selectedCard)"
+            >{{ t('card.editDerivedAction') }}</button>
+            <button
+              v-else
+              class="btn-detail-edit"
+              @click="openEditModal(selectedCard)"
+            >{{ t('card.edit') }}</button>
+            <!-- <button class="btn-detail-edit" @click="openEditModal(selectedCard)">{{ t('card.edit') }}</button> -->
             <button class="btn-detail-delete" @click="confirmDelete(selectedCard)">{{ t('card.delete') }}</button>
           </div>
         </div>
@@ -431,6 +485,13 @@ const selectedCardTagClasses = computed(() => {
           />
         </div>
         <div class="modal-footer">
+          <label v-if="isEditMode && editingCard?.origin !== 'local'" class="shadow-option">
+            <input type="checkbox" v-model="shadowSource" />
+            <div class="shadow-option-text">
+              <span>{{ t('card.shadowSourceLabel') }}</span>
+              <span class="shadow-option-hint">{{ t('card.shadowSourceHint') }}</span>
+            </div>
+          </label>
           <button class="btn-cancel" @click="closeModal">{{ t('common.cancel') }}</button>
           <button class="btn-save" @click="handleSave" :disabled="!formValid">
             {{ isEditMode ? t('card.save') : t('card.createAction') }}
@@ -438,27 +499,6 @@ const selectedCardTagClasses = computed(() => {
         </div>
       </div>
     </div>
-
-    <!-- 删除确认弹窗 -->
-    <!-- <div v-if="showDeleteConfirm" class="modal-overlay" @click="closeDeleteConfirm">
-      <div class="modal-content confirm-dialog" @click.stop>
-        <h3 class="confirm-title">{{ t('card.deleteConfirmTitle') }}</h3>
-        <p class="confirm-message">{{ t('card.deleteConfirmContent', { name: deletingCard && displayContent(deletingCard) }) }}</p>
-        <div v-if="referencingDecks.length > 0" class="confirm-refs">
-          <p class="ref-hint">{{ t('card.deleteRefDeckWarning') }}</p>
-          <ul class="ref-list">
-            <li v-for="deck in referencingDecks" :key="deck.global_id">
-              {{ pickLocalized(deck.name) }}
-            </li>
-          </ul>
-        </div>
-        <p class="warning">{{ t('card.deleteWarning') }}</p>
-        <div class="modal-footer">
-          <button class="btn-cancel" @click="closeDeleteConfirm">{{ t('common.cancel') }}</button>
-          <button class="btn-danger" @click="confirmDelete(selectedCard)">{{ t('card.deleteConfirmTitle') }}</button>
-        </div>
-      </div>
-    </div> -->
   </div>
 </template>
 
@@ -877,6 +917,40 @@ const selectedCardTagClasses = computed(() => {
   color: #d0a24c;
 }
 
+.shadow-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.shadow-badge {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+}
+.shadow-on {
+  background: rgba(79, 110, 247, 0.2);
+  color: #9db2ff;
+}
+.shadow-off {
+  background: rgba(255, 255, 255, 0.08);
+  color: #8a99b4;
+}
+.btn-toggle-shadow {
+  background: #3b4b5e;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 14px;
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-toggle-shadow:hover {
+  background: #4f6ef7;
+}
+
 .detail-actions {
   display: flex;
   flex-direction: row;
@@ -975,12 +1049,47 @@ const selectedCardTagClasses = computed(() => {
   background: #2a3340;
   border-radius: 4px;
 }
+/* .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  flex-shrink: 0;
+} */
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
   flex-shrink: 0;
+  align-items: center;   /* 让 checkbox 和按钮垂直居中 */
+}
+.shadow-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;   /* 推到左侧 */
+  cursor: pointer;
+  user-select: none;
+}
+.shadow-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #007bff;
+}
+.shadow-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shadow-option-text span:first-child {
+  font-size: 1.2rem;
+  color: #b0c0d0;
+}
+.shadow-option-hint {
+  font-size: 1rem;
+  color: #6a7a90;
 }
 .btn-cancel {
   background: transparent;

@@ -9,6 +9,8 @@ export interface CardSummary {
   origin: Origin,
   forked_from?: string,
   forked_from_name?: LocalizedString,
+  derived_id?: string,
+  shadowed: boolean,
   content: LocalizedString,
   title?: LocalizedString,
   assets?: CardAssets,
@@ -32,6 +34,7 @@ export interface CardUpdateRequest {
   content: LocalizedString,
   title?: LocalizedString,
   tags: Tag[],
+  shadow?: boolean,
 }
 
 /**
@@ -69,6 +72,10 @@ export async function updateCard(req: CardUpdateRequest): Promise<CardSummary> {
 
 export async function deleteCard(globalId: string): Promise<void> {
   return await invoke("delete_card", { globalId });
+}
+
+export async function setCardShadow(globalId: string, shadowed: boolean): Promise<CardSummary> {
+  return await invoke("set_card_shadow", { globalId, shadowed });
 }
 
 export async function getCardReferencingDecks(globalId: string): Promise<DeckReference[]> {

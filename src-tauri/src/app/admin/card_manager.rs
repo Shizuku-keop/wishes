@@ -111,7 +111,13 @@ impl CardManager {
     /// - 写入文件失败
     /// 
     /// 任何失败, 都不会改动原对象.
-    pub fn update_card(&self, id: GlobalId, content: LocalizedString, tags: Vec<Tag>, title: Option<LocalizedString>) -> Result<TaggedCard> {
+    pub fn update_card(&self,
+        id: GlobalId,
+        content: LocalizedString,
+        tags: Vec<Tag>,
+        title: Option<LocalizedString>,
+        shadow: Option<bool>,
+    ) -> Result<TaggedCard> {
         if content.is_empty() {
             anyhow::bail!("卡片内容至少需要一种非空语言");
         }
@@ -122,7 +128,7 @@ impl CardManager {
         
         // 只读来源 -> 分叉
         if old_card.origin.is_read_only() {
-            return self.fork_card_from(old_card.as_ref(), |card| {
+            return self.fork_card_from(old_card.as_ref(), shadow.unwrap_or(true), |card| {
                 card.content = content;
                 card.set_tags(tags.into_iter());
                 card.title = title.filter(|t| !t.is_empty());
@@ -162,14 +168,26 @@ impl CardManager {
     /// 3. 写入 `data/local/cards/`.
     /// 4. 原对象保持不变, 并在列表/抽卡查询中被**遮蔽**.
     /// 5. 所有显式引用原卡片的可见卡组重写为指向派生对象.
-    pub fn fork_card_from<F>(&self, source: &TaggedCard, mutable: F) -> Result<TaggedCard>
+    pub fn fork_card_from<F>(&self, source: &TaggedCard, shadow: bool, mutable: F) -> Result<TaggedCard>
     where
         F: FnOnce(&mut TaggedCard),
     {
+        let source_id = source.global_id;
+
+        let existing = self.card_registry.derived_of(source_id);
+        if !existing.is_empty() {
+            anyhow::bail!(
+                "Card {} 已存在派生对象 {:?}, 请编辑派生对象, 或先删除派生对象再重新派生",
+                source_id,
+                existing.iter().map(|id| id.to_string()).collect::<Vec<_>>()
+            )
+        }
+        
         let mut derived = source.clone();
         derived.global_id = GlobalId::new();
         derived.origin = Origin::Local;
         derived.forked_from = Some(source.global_id);
+        derived.shadowed = shadow;
         mutable(&mut derived);
 
         let path = self.build_file_path(derived.global_id);
@@ -181,7 +199,12 @@ impl CardManager {
         self.card_registry.insert(derived.clone());
         self.card_registry.insert_path(derived_id, path);
 
-        let rewritten = self.redirect_card_references(source_id, derived_id);
+        // let rewritten = self.redirect_card_references(source_id, derived_id);
+        let rewritten = if shadow {
+            self.redirect_card_references(source_id, derived_id)
+        } else {
+            0   // 不遮蔽: 引用保持指向原对象, 派生对象作为备份存在
+        };
         if rewritten > 0 {
             tracing::info!(
                 source_id = %source_id,
@@ -191,7 +214,10 @@ impl CardManager {
             );
         }
 
-        tracing::info!(source_id = %source_id, derived_id = %derived_id, "从只读来源 (官方/拓展包) 分叉 Card");
+        tracing::info!(
+            source_id = %source_id, derived_id = %derived_id, shadow,
+            "从只读来源 (官方/拓展包) 分叉 Card"
+        );
 
         Ok(derived)
     }
@@ -341,5 +367,37 @@ impl CardManager {
     /// 路径格式: `data/local/cards/{global_id}.json`
     fn build_file_path(&self, id: GlobalId) -> PathBuf {
         self.writable_dir().join(format!("{}.json", id))
+    }
+
+    pub fn set_shadow(&self, id: GlobalId, shadowed: bool) -> Result<TaggedCard> {
+        let card = self.card_registry.get_including_shadowed(id)
+            .ok_or_else(|| anyhow::anyhow!("Card {} 不存在", id))?;
+
+        let source = card.forked_from
+            .ok_or_else(|| anyhow::anyhow!("Card {} 不是派生对象, 无法设置遮蔽", id))?;
+
+        if card.shadowed == shadowed {
+            return Ok(card.as_ref().clone());
+        }
+
+        let mut updated = card.as_ref().clone();
+        updated.shadowed = shadowed;
+
+        let path = self.card_registry.get_path(id)
+            .ok_or_else(|| anyhow::anyhow!("Card {} 的文件路径未记录", id))?;
+        atomic_write_json(&path, &updated, "Card")?;
+        self.card_registry.insert(updated.clone());
+
+        // 根据新状态重写引用
+        let rewritten = if shadowed {
+            // 启用遮蔽: 引用指向派生
+            self.redirect_card_references(source, id)
+        } else {
+            // 撤销遮蔽: 引用指回原对象
+            self.redirect_card_references(id, source)
+        };
+
+        tracing::info!(card_id = %id, shadowed, rewritten,  "设置 Card 遮蔽状态");
+        Ok(updated)
     }
 }

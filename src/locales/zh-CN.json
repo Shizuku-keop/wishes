@@ -120,7 +120,20 @@
     "deleteError": "删除卡片失败: {error}",
     "loadFailed": "加载卡片失败: {error}",
     "createFailed": "创建卡片失败: {error}",
-    "updateFailed": "更新卡片失败: {error}"
+    "updateFailed": "更新卡片失败: {error}",
+    "shadowSourceLabel": "遮蔽原卡片",
+    "shadowSourceHint": "遮蔽后，原卡片将不会出现在卡片列表中（数据仍保留）",
+    "shadowedYes": "已遮蔽原卡片",
+    "shadowedNo": "未遮蔽原卡片",
+    "shadowAction": "启用遮蔽",
+    "unshadowAction": "撤销遮蔽",
+    "shadowEnabled": "已启用遮蔽，原卡片已隐藏",
+    "shadowDisabled": "已撤销遮蔽，原卡片已恢复显示",
+    "derivedExistsTitle": "该卡片已有派生版本",
+    "derivedExistsContent": "「{name}」的派生版本已存在。为避免引用混乱，请直接编辑派生版本；若想以官方内容重新开始，请先在列表中删除派生版本。",
+    "editDerivedAction": "编辑派生版本",
+    "derivedNotFound": "未找到派生版本，请刷新列表后重试",
+    "hasDerived": "已有派生"
   },
   "logic": {
     "managerTitle": "逻辑管理"

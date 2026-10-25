@@ -120,7 +120,20 @@
     "deleteError": "カードの削除に失敗しました: {error}",
     "loadFailed": "カードの読み込みに失敗しました: {error}",
     "createFailed": "カードの作成に失敗しました: {error}",
-    "updateFailed": "カードの更新に失敗しました: {error}"
+    "updateFailed": "カードの更新に失敗しました: {error}",
+    "shadowSourceLabel": "元のカードを遮蔽する",
+    "shadowSourceHint": "遮蔽すると元のカードはカード一覧に表示されなくなります（データは保持されます）",
+    "shadowedYes": "元のカードを遮蔽中",
+    "shadowedNo": "元のカードは表示中",
+    "shadowAction": "遮蔽を有効化",
+    "unshadowAction": "遮蔽を解除",
+    "shadowEnabled": "遮蔽を有効化しました。元のカードは非表示になりました",
+    "shadowDisabled": "遮蔽を解除しました。元のカードが再び表示されます",
+    "derivedExistsTitle": "このカードにはすでに派生版が存在します",
+    "derivedExistsContent": "「{name}」の派生版がすでに存在します。参照の混乱を避けるため、派生版を直接編集してください。元の内容からやり直すには、先に派生版を削除してください。",
+    "editDerivedAction": "派生版を編集",
+    "derivedNotFound": "派生版が見つかりません。一覧を更新して再試行してください。",
+    "hasDerived": "派生あり"
   },
   "logic": {
     "managerTitle": "ロジック管理"

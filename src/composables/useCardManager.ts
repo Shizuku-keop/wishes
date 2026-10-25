@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { CardCreateRequest, CardSummary, CardUpdateRequest, createCard, deleteCard, listCards, updateCard } from "../api/card";
+import { CardCreateRequest, CardSummary, CardUpdateRequest, createCard, deleteCard, listCards, setCardShadow, updateCard } from "../api/card";
 import { Tag } from "../types";
 import { allLocalizedValues, pickLocalized, useLocaleText } from "./useLocaleText";
 
@@ -50,7 +50,7 @@ export function useCardManager() {
     }
   }
 
-  async function create(req: CardCreateRequest): Promise<CardSummary | null> {
+  async function create(req: CardCreateRequest): Promise<CardSummary> {
     loading.value = true;
     try {
       const newCard = await createCard(req);
@@ -61,17 +61,18 @@ export function useCardManager() {
     }
   }
 
-  async function update(req: CardUpdateRequest): Promise<CardSummary | null> {
+  async function update(req: CardUpdateRequest): Promise<CardSummary> {
     loading.value = true;
     try {
       const updated = await updateCard(req);
-      const index = cards.value.findIndex(c => c.global_id === req.global_id);
-      if (index !== -1) {
-        cards.value[index] = updated;
-      } else {
-        // 只读来源的卡片更新时会分叉出新的 global_id, 直接加入列表
-        cards.value.unshift(updated);
-      }
+      await loadCards();
+      // const index = cards.value.findIndex(c => c.global_id === req.global_id);
+      // if (index !== -1) {
+      //   cards.value[index] = updated;
+      // } else {
+      //   // 只读来源的卡片更新时会分叉出新的 global_id, 直接加入列表
+      //   cards.value.unshift(updated);
+      // }
       return updated;
     } finally {
       loading.value = false;
@@ -84,6 +85,18 @@ export function useCardManager() {
       await deleteCard(globalId);
       await loadCards();    // 重新拉取, 在删除派生对象时让原对象重新显示
     } finally {             // 错误继续上抛, 由调用方处理
+      loading.value = false;
+    }
+  }
+
+  /** 设置卡片的遮蔽 */
+  async function toggleShadow(globalId: string, shadowed: boolean): Promise<CardSummary> {
+    loading.value = true;
+    try {
+      const updated = await setCardShadow(globalId, shadowed);
+      await loadCards();
+      return updated;
+    } finally {
       loading.value = false;
     }
   }
@@ -114,5 +127,6 @@ export function useCardManager() {
     create,
     update,
     remove,
+    toggleShadow,
   }
 }

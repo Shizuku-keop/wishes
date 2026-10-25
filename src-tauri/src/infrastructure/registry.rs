@@ -38,6 +38,10 @@ use crate::{
 ///   若某原对象存在派生对象, 则该原对象在列表与抽卡查询中被遮蔽.
 #[derive(Default)]
 pub struct ForkIndex {
+    /// 派生关系: 原对象 global_id -> 派生对象 global_id 集合.
+    /// 
+    /// **与遮蔽无关** —— 只要 `forked_from` 指向该对象就登记, 不管
+    /// 派生对象的 `shadowed` 是什么值.
     derived: DashMap<GlobalId, HashSet<GlobalId>>,
 }
 
@@ -69,9 +73,9 @@ impl ForkIndex {
     }
 
     /// 指定原对象是否已被派生 (因而应被遮蔽).
-    pub fn is_shadowed(&self, source_id: GlobalId) -> bool {
-        self.derived.contains_key(&source_id)
-    }
+    // pub fn is_shadowed(&self, source_id: GlobalId) -> bool {
+    //     self.derived.contains_key(&source_id)
+    // }
 
     /// 指定原对象的所有派生对象 `global_id`.
     pub fn derived_of(&self, source_id: GlobalId) -> Vec<GlobalId> {
@@ -81,10 +85,20 @@ impl ForkIndex {
             .unwrap_or_default()
     }
 
-    /// 被派生过的原对象总数.
-    pub fn shadowed_count(&self) -> usize {
+    /// 指定原对象是否已被派生 (不管是否遮蔽).
+    pub fn has_derived(&self, source_id: GlobalId) -> bool {
+        self.derived.contains_key(&source_id)
+    }
+
+    /// 被派生过的原对象总数 (不管是否遮蔽).
+    pub fn derived_source_count(&self) -> usize {
         self.derived.len()
     }
+
+    // 被派生过的原对象总数.
+    // pub fn shadowed_count(&self) -> usize {
+    //     self.derived.len()
+    // }
 }
 
 /// 内置硬编码执行器名称常量.
@@ -104,30 +118,31 @@ pub mod builtin_hardcoded_executor {
 macro_rules! impl_fork_ops {
     ($registry:ty, $object:ty, $verb:literal) => {
         impl $registry {
-            #[doc = concat!("登记一条派生关系: `derived` 派生自 `source`, 原对象将被遮蔽.")]
-            #[doc = ""]
-            #[doc = "通常由 `insert` / `remove_*` 自动调用, 仅在特殊场景下手动使用."]
+            /// 登记一条派生关系: `derived_id` 派生自 `source_id`.
+            /// 
+            /// **无条件登记**, 与该派生对象是否遮蔽原对象无关.
             pub fn mark_forked(&self, source_id: GlobalId, derived_id: GlobalId) {
                 self.fork_index.insert(source_id, derived_id);
-                tracing::info!(source = %source_id, derived = %derived_id, concat!($verb, " 分叉登记"));
+                tracing::debug!(source = %source_id, derived = %derived_id, concat!($verb, " 派生关系登记"));
             }
 
-            #[doc = "解除一条派生关系 (删除派生对象时调用)."]
-            #[doc = ""]
-            #[doc = "解除后若已无其他派生对象, 原对象立即重新可见."]
+            /// 解除一条派生关系 (删除派生对象时调用).
+            /// 
+            /// 解除后该原对象可再次被派生.
             pub fn unmark_forked(&self, source_id: GlobalId, derived_id: GlobalId) {
                 self.fork_index.remove(source_id, derived_id);
-                tracing::info!(source = %source_id, derived = %derived_id, concat!($verb, " 分叉解除"));
+                tracing::debug!(source = %source_id, derived = %derived_id, concat!($verb, " 派生关系解除"));
             }
 
-            /// 指定对象是否被派生对象遮蔽.
+            /// 指定对象是否被其派生对象**遮蔽** (即不可见).
+            /// 
+            /// 判定方式: 该对象存在派生, 且至少一个派生对象的 `shadowed = true`.
             pub fn is_shadowed(&self, id: GlobalId) -> bool {
-                self.fork_index.is_shadowed(id)
-            }
-
-            /// 指定对象的所有派生版本.
-            pub fn derived_of(&self, id: GlobalId) -> Vec<GlobalId> {
-                self.fork_index.derived_of(id)
+                self.fork_index.derived_of(id).iter().any(|derived_id| {
+                    self.storage.get(derived_id)
+                        .map(|entry| entry.value().shadowed)
+                        .unwrap_or(false)
+                })
             }
 
             /// 该对象是否可见 (未被派生版本遮蔽).
@@ -135,11 +150,21 @@ macro_rules! impl_fork_ops {
                 !self.is_shadowed(id)
             }
 
+            /// 指定对象的所有派生版本.
+            pub fn derived_of(&self, id: GlobalId) -> Vec<GlobalId> {
+                self.fork_index.derived_of(id)
+            }
+
+            /// 指定对象是否已被派生 (不管是否遮蔽).
+            pub fn has_derived(&self, id: GlobalId) -> bool {
+                self.fork_index.has_derived(id)
+            }
+
             /// 获取所有**可见**对象 (跳过被遮蔽的原对象), 顺序不确定.
             pub fn all_visible(&self) -> Vec<Arc<$object>> {
                 self.storage
                     .iter()
-                    .filter(|entry| !self.fork_index.is_shadowed(*entry.key()))
+                    .filter(|entry| !self.is_shadowed(*entry.key()))
                     .map(|entry| entry.value().clone())
                     .collect()
             }
@@ -160,7 +185,7 @@ macro_rules! impl_fork_ops {
             pub fn count_visible(&self) -> usize {
                 self.storage
                     .iter()
-                    .filter(|entry| !self.fork_index.is_shadowed(*entry.key()))
+                    .filter(|entry| !self.is_shadowed(*entry.key()))
                     .count()
             }
         }
@@ -213,7 +238,7 @@ impl CardRegistry {
 
     /// 检查指定 `global_id` 的卡片是否存在且可见.
     pub fn contains_visible(&self, id: GlobalId) -> bool {
-        self.storage.contains_key(&id) && !self.fork_index.is_shadowed(id)
+        self.storage.contains_key(&id) && !self.is_shadowed(id)
     }
 
     /// 插入一张卡片, 同时加入标签索引.
@@ -222,6 +247,7 @@ impl CardRegistry {
     pub fn insert(&self, card: TaggedCard) {
         let id = card.global_id;
         let new_forked_from = card.forked_from;
+        // let should_shadow = card.shadowed;
 
         // 检查旧的标签索引, 同时取出旧的 forked_from
         let old_forked_from = if let Some(old) = self.storage.get(&id) {
@@ -233,17 +259,16 @@ impl CardRegistry {
             None
         };
 
-        // 旧的分叉关系与新对象不同, 先删除
+        // 无条件解除旧的遮蔽关系, 若 shadow 为 true, 之后会重新建立
         if let Some(source) = old_forked_from {
-            if Some(source) != new_forked_from {
-                self.unmark_forked(source, id);
-            }
+            self.unmark_forked(source, id);
         }
 
         let tags: Vec<Tag> = card.tags.iter().cloned().collect();
         self.tag_index.insert(id, &tags);
         self.storage.insert(id, Arc::new(card));
 
+        // 无条件登记派生关系 (不管 shadowed 值)
         if let Some(source) = new_forked_from {
             self.mark_forked(source, id);
         }
@@ -294,7 +319,7 @@ impl CardRegistry {
     
     /// 通过 `global_id` 获取卡片的一个 `Arc` 引用, 仅在该卡片**可见**时返回.
     pub fn get_visible(&self, id: GlobalId) -> Option<Arc<TaggedCard>> {
-        if self.fork_index.is_shadowed(id) {
+        if self.is_shadowed(id) {
             None
         } else {
             self.storage.get(&id).map(|entry| entry.value().clone())
@@ -350,7 +375,7 @@ impl DeckRegistry {
 
     /// 检查指定 `global_id` 的卡组是否存在且可见.
     pub fn contains_visible(&self, id: GlobalId) -> bool {
-        self.storage.contains_key(&id) && !self.fork_index.is_shadowed(id)
+        self.storage.contains_key(&id) && !self.is_shadowed(id)
     }
 
     /// 插入一个卡组.
@@ -427,7 +452,7 @@ impl DeckRegistry {
 
     /// 通过 `global_id` 获取卡组的 `Arc` 引用, 仅在**可见**时返回.
     pub fn get_visible(&self, id: GlobalId) -> Option<Arc<TaggedDeck>> {
-        if self.fork_index.is_shadowed(id) {
+        if self.is_shadowed(id) {
             None
         } else {
             self.storage.get(&id).map(|entry| entry.clone())
@@ -499,7 +524,7 @@ impl BannerRegistry {
 
     /// 检查指定 `global_id` 的卡池是否存在且可见.
     pub fn contains_visible(&self, id: GlobalId) -> bool {
-        self.storage.contains_key(&id) && !self.fork_index.is_shadowed(id)
+        self.storage.contains_key(&id) && !self.is_shadowed(id)
     }
 
     /// 插入一个新卡池, 同时维护标签, 分叉与 `deck_to_banners` 索引.
@@ -617,7 +642,7 @@ impl BannerRegistry {
 
     /// 通过 `global_id` 获取卡池的 `Arc` 引用, 仅在**可见**时返回.
     pub fn get_visible(&self, id: GlobalId) -> Option<Arc<TaggedBanner>> {
-        if self.fork_index.is_shadowed(id) {
+        if self.is_shadowed(id) {
             None
         } else {
             self.storage.get(&id).map(|entry| entry.value().clone())
@@ -638,7 +663,7 @@ impl BannerRegistry {
     pub fn all_visible_ids(&self) -> Vec<GlobalId> {
         self.storage
             .iter()
-            .filter(|entry| !self.fork_index.is_shadowed(*entry.key()))
+            .filter(|entry| !self.is_shadowed(*entry.key()))
             .map(|entry| *entry.key())
             .collect()
     }
@@ -742,7 +767,7 @@ impl LogicRegistry {
 
     /// 检查是否存在指定 `global_id` 的逻辑定义且可见.
     pub fn contains_definition_visible(&self, id: GlobalId) -> bool {
-        self.storage.contains_key(&id) && !self.fork_index.is_shadowed(id)
+        self.storage.contains_key(&id) && !self.is_shadowed(id)
     }
 
     pub fn insert_definition(&self, def: TaggedLogicDefinition) {
@@ -800,7 +825,7 @@ impl LogicRegistry {
 
     /// 通过 `global_id` 获取逻辑定义的 `Arc` 引用, 仅在**可见**时返回.
     pub fn get_definition_visible(&self, id: GlobalId) -> Option<Arc<TaggedLogicDefinition>> {
-        if self.fork_index.is_shadowed(id) {
+        if self.is_shadowed(id) {
             None
         } else {
             self.storage.get(&id).map(|entry| entry.value().clone())

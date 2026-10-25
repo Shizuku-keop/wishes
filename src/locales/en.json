@@ -120,7 +120,20 @@
     "deleteError": "Failed to delete the card: {error}",
     "loadFailed": "Failed to load cards: {error}",
     "createFailed": "Failed to create the card: {error}",
-    "updateFailed": "Failed to update the card: {error}"
+    "updateFailed": "Failed to update the card: {error}",
+    "shadowSourceLabel": "Shadow original card",
+    "shadowSourceHint": "When shadowed, the original card is hidden from the card list (data is preserved)",
+    "shadowedYes": "Original card shadowed",
+    "shadowedNo": "Original card visible",
+    "shadowAction": "Enable shadow",
+    "unshadowAction": "Remove shadow",
+    "shadowEnabled": "Shadow enabled, original card hidden",
+    "shadowDisabled": "Shadow removed, original card is visible again",
+    "derivedExistsTitle": "This card already has a derived version",
+    "derivedExistsContent": "\"{name}\" already has a derived version. To avoid reference confusion, please edit the derived version directly. If you want to start over from the original content, delete the derived version first.",
+    "editDerivedAction": "Edit derived version",
+    "derivedNotFound": "Derived version not found. Please refresh the list and try again.",
+    "hasDerived": "Has derived"
   },
   "logic": {
     "managerTitle": "Logic Management"
