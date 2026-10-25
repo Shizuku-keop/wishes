@@ -113,6 +113,7 @@ fn updating_official_card_forks_instead_of_mutating() {
         LocalizedString::single("zh-CN", "我的胡桃"),
         Vec::new(),
         None,
+        None,
     ).unwrap();
 
     assert_eq!(derived.forked_from, Some(official_id), "派生对象应记录来源");
@@ -140,6 +141,7 @@ fn deleting_forked_card_restores_official_view() {
         official_id,
         LocalizedString::single("zh-CN", "我的胡桃"),
         Vec::new(),
+        None,
         None,
     ).unwrap();
 
@@ -184,6 +186,7 @@ fn forking_card_redirects_deck_references() {
         official_id,
         LocalizedString::single("zh-CN", "我的胡桃"),
         Vec::new(),
+        None,
         None,
     ).unwrap();
 

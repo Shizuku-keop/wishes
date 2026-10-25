@@ -93,17 +93,11 @@ impl MembershipCondition {
 }
 
 /// 卡组成员规则, 每个条件顺序应用.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Membership {
     /// 按顺序应用的条件列表.
     #[serde(default)]
     pub conditions: Vec<MembershipCondition>,
-}
-
-impl Default for Membership {
-    fn default() -> Self {
-        Self { conditions: Vec::new() }
-    }
 }
 
 impl Membership {
@@ -216,7 +210,7 @@ pub enum EventGroupCondition {
 }
 
 /// 活动标签分组.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventGroup {
     /// 按顺序应用的条件列表.
     #[serde(default)]
@@ -238,12 +232,6 @@ impl EventGroupCondition {
         } else {
             false
         }
-    }
-}
-
-impl Default for EventGroup {
-    fn default() -> Self {
-        Self { conditions: Vec::new() }
     }
 }
 

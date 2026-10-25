@@ -71,12 +71,7 @@ impl ForkIndex {
             self.derived.remove(&source_id);
         }
     }
-
-    /// 指定原对象是否已被派生 (因而应被遮蔽).
-    // pub fn is_shadowed(&self, source_id: GlobalId) -> bool {
-    //     self.derived.contains_key(&source_id)
-    // }
-
+    
     /// 指定原对象的所有派生对象 `global_id`.
     pub fn derived_of(&self, source_id: GlobalId) -> Vec<GlobalId> {
         self.derived

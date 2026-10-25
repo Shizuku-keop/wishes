@@ -153,7 +153,7 @@ fn open_log_dir(handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn list_cards(state: State<AppState>) -> Result<Vec<CardSummary>, String> {
     let cards = state.card_manager.list_all();
-    Ok(cards.iter().map(|card| CardSummary::from_with_registry(&card, &state.card_registry)).collect())
+    Ok(cards.iter().map(|card| CardSummary::from_with_registry(card, &state.card_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
@@ -161,7 +161,7 @@ fn list_cards(state: State<AppState>) -> Result<Vec<CardSummary>, String> {
 #[tauri::command]
 fn list_cards_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<CardSummary>, String> {
     let cards = state.card_manager.list_by_tags(&tags);
-    Ok(cards.iter().map(|card| CardSummary::from_with_registry(&card, &state.card_registry)).collect())
+    Ok(cards.iter().map(|card| CardSummary::from_with_registry(card, &state.card_registry)).collect())
 }
 
 /// 创建新的卡片.
@@ -213,14 +213,14 @@ fn get_card_referencing_decks(global_id: GlobalId, state: State<AppState>) -> Re
 #[tauri::command]
 fn list_decks(state: State<AppState>) -> Result<Vec<DeckSummary>, String> {
     let decks = state.deck_manager.list_all();
-    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(&d, &state.deck_registry)).collect())
+    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(d, &state.deck_registry)).collect())
 }
 
 /// 获取根据标签筛选后的卡片的信息.
 #[tauri::command]
 fn list_decks_by_tags(tags: Vec<Tag>, state: State<AppState>) -> Result<Vec<DeckSummary>, String> {
     let decks = state.deck_manager.list_by_tags(&tags);
-    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(&d, &state.deck_registry)).collect())
+    Ok(decks.iter().map(|d| DeckSummary::from_with_registry(d, &state.deck_registry)).collect())
 }
 
 /// 创建新卡组.
