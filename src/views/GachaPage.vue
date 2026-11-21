@@ -5,6 +5,8 @@
  */
 
 import type { BannerInfo } from '../types';
+import { useI18n } from 'vue-i18n';
+import { pickLocalized, useLocaleText } from '../composables/useLocaleText';
 
 defineProps<{
   bannerInfo: BannerInfo | null
@@ -14,15 +16,17 @@ defineEmits<{
   (e: 'wishSingle'): void,
   (e: 'wishTen'): void,
 }>();
+
+const { t } = useI18n();
+const { currentLocale } = useLocaleText();
 </script>
 
 
 <template>
   <div class="page gacha-page">
       <div class="gacha-card">
-        <div class="banner-id">ID {{ bannerInfo?.id }}</div>
         <div class="info-section">
-          <div class="banner-name">{{ bannerInfo?.name || '未选择卡池' }}</div>
+          <div class="banner-name">{{ bannerInfo ? pickLocalized(bannerInfo.name, currentLocale) : t('gacha.noBannerSelected') }}</div>
           <div class="banner-tags" v-if="bannerInfo">
             <span
               v-for="tag in bannerInfo.tags"
@@ -34,19 +38,19 @@ defineEmits<{
           </div>
           <div class="detail-list" v-if="bannerInfo">
             <div class="detail-item">
-              <span class="label">卡组</span>
-              <span class="value">{{ bannerInfo.deck_name }}</span>
+              <span class="label">{{ t('gacha.deckLabel') }}</span>
+              <span class="value">{{ pickLocalized(bannerInfo.deck_name, currentLocale) }}</span>
             </div>
             <div class="detail-item">
-              <span class="label">逻辑</span>
-              <span class="value">{{ bannerInfo.logic_name }}</span>
+              <span class="label">{{ t('gacha.logicLabel') }}</span>
+              <span class="value">{{ pickLocalized(bannerInfo.logic_name, currentLocale) }}</span>
             </div>
             <div class="detail-item">
-              <span class="label">总抽数</span>
+              <span class="label">{{ t('gacha.totalCounterLabel') }}</span>
               <span class="value">{{ bannerInfo.total_counter }}</span>
             </div>
           </div>
-          <div v-else class="loading_placeholder">加载卡池信息中...</div>
+          <div v-else class="loading_placeholder">{{ t('gacha.loadingInfo') }}</div>
         </div>
 
         <div class="portrait-section">
@@ -56,10 +60,10 @@ defineEmits<{
 
     <div class="action-bar">
       <button class="btn-wish btn-single" @click="$emit('wishSingle')" :disabled="!bannerInfo">
-        抽卡 1 次
+        {{ t('gacha.wishSingle') }}
       </button>
       <button class="btn-wish btn-ten" @click="$emit('wishTen')" :disabled="!bannerInfo">
-        抽卡 10 次
+        {{ t('gacha.wishTen') }}
       </button>
     </div>
   </div>
@@ -103,24 +107,6 @@ defineEmits<{
   position: relative;
   min-height: 250px;
   min-width: 450px;
-}
-
-.banner-id {
-  position: absolute;
-  top: 1.2rem;
-  left: -0.5rem;
-  background: #4b7ac1;
-  /* background: #dc1e47; */
-  /* background: #007bff; */
-  /* color: #e1eaf5; */
-  color: #fff;
-  font-size: 1.2rem;
-  letter-spacing: 0.3px;
-  padding: 3px 10px 3px 12px;
-  border-radius: 0 100px 100px 0;
-  box-shadow: 0 4px 16px rgba(0, 123, 255, 0.2);
-  z-index: 3;
-  line-height: 1.4;
 }
 
 .info-section {

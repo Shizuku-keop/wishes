@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { listCards } from '../../api/card';
 import type { CardSummary } from '../../api/card';
+import { allLocalizedValues, pickLocalized, useLocaleText } from '../../composables/useLocaleText';
 
 const props = defineProps<{
-  initialSelectedIds: number[];
+  initialSelectedIds: string[];
 }>();
 
 const emit = defineEmits<{
-  (e: 'confirm', ids: number[]): void;
+  (e: 'confirm', ids: string[]): void;
   (e: 'close'): void;
 }>();
 
+const { t } = useI18n();
+const { currentLocale } = useLocaleText();
+
 const cards = ref<CardSummary[]>([]);
 const searchQuery = ref('');
-const selectedIds = ref<Set<number>>(new Set(props.initialSelectedIds));
+const selectedIds = ref<Set<string>>(new Set(props.initialSelectedIds));
 const loading = ref(false);
 
 /** 空格分隔的关键词, 全部小写 */
@@ -24,9 +29,9 @@ const searchTokens = computed<string[]>(() => {
   return q.split(/\s+/).filter(Boolean);
 });
 
-/** 单个关键词是否命中卡片: 匹配内容 / 标签命名空间 / 标签值 */
+/** 单个关键词是否命中卡片: 匹配任意语言的内容 / 称号 / 标签命名空间 / 标签值 */
 function matchesToken(card: CardSummary, token: string): boolean {
-  if (card.content.toLowerCase().includes(token)) return true;
+  if (allLocalizedValues(card.content).some(text => text.toLowerCase().includes(token))) return true;
   return card.tags.some(tag =>
     tag.namespace.toLowerCase().includes(token) ||
     tag.value.toLowerCase().includes(token)
@@ -42,13 +47,13 @@ const filteredCards = computed(() => {
   );
 });
 
-/** 排序: 已选优先, 其余按 id 降序 */
+/** 排序: 已选优先, 其余保持后端已有顺序 */
 const sortedCards = computed(() => {
   return [...filteredCards.value].sort((a, b) => {
-    const aSelected = selectedIds.value.has(a.id);
-    const bSelected = selectedIds.value.has(b.id);
+    const aSelected = selectedIds.value.has(a.global_id);
+    const bSelected = selectedIds.value.has(b.global_id);
     if (aSelected !== bSelected) return aSelected ? -1 : 1;
-    return b.id - a.id;
+    return a.global_id.localeCompare(b.global_id);
   });
 });
 
@@ -101,8 +106,12 @@ function highlight(text: string, tokens: string[]): Segment[] {
   return segments;
 }
 
+/** 卡片在当前界面语言下的显式内容 */
+const displayContent = (card: CardSummary) =>
+  pickLocalized(card.content, currentLocale.value);
+
 const contentSegments = (card: CardSummary) =>
-  highlight(card.content, searchTokens.value);
+  highlight(displayContent(card), searchTokens.value);
 
 const tagSegments = (value: string) =>
   highlight(value, searchTokens.value);
@@ -118,11 +127,11 @@ onMounted(async () => {
   }
 });
 
-function toggleCard(id: number) {
-  if (selectedIds.value.has(id)) {
-    selectedIds.value.delete(id);
+function toggleCard(globalId: string) {
+  if (selectedIds.value.has(globalId)) {
+    selectedIds.value.delete(globalId);
   } else {
-    selectedIds.value.add(id);
+    selectedIds.value.add(globalId);
   }
 }
 
@@ -144,7 +153,7 @@ function close() {
   <div class="modal-overlay" @click="close">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h3>选择卡片</h3>
+        <h3>{{ t('condition.selectCards') }}</h3>
         <button class="close-btn" @click="close">✕</button>
       </div>
 
@@ -152,28 +161,28 @@ function close() {
         <div class="search-input-wrapper">
           <input
             v-model="searchQuery"
-            placeholder="搜索内容或标签, 空格分隔多个关键词"
+            :placeholder="t('condition.searchPlaceholder')"
             class="search-input"
           />
           <button
             v-if="searchQuery"
             class="search-clear"
-            title="清空"
+            :title="t('condition.clearSearch')"
             @click="clearSearch"
           >✕</button>
         </div>
-        <span class="selected-count">已选 {{ selectedIds.size }} 张</span>
+        <span class="selected-count">{{ t('condition.selectedCount', { count: selectedIds.size }) }}</span>
       </div>
 
       <div class="modal-body">
-        <div v-if="loading" class="loading">加载中...</div>
+        <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
         <div v-else class="card-grid">
           <div
             v-for="card in sortedCards"
-            :key="card.id"
+            :key="card.global_id"
             class="card-item"
-            :class="{ selected: selectedIds.has(card.id) }"
-            @click="toggleCard(card.id)"
+            :class="{ selected: selectedIds.has(card.global_id) }"
+            @click="toggleCard(card.global_id)"
           >
             <div class="card-content">
               <span
@@ -195,17 +204,17 @@ function close() {
                 >{{ seg.text }}</span>
               </span>
             </div>
-            <div class="check-mark" v-if="selectedIds.has(card.id)">✓</div>
+            <div class="check-mark" v-if="selectedIds.has(card.global_id)">✓</div>
           </div>
           <div v-if="sortedCards.length === 0 && !loading" class="empty">
-            没有匹配的卡片
+            {{ t('card.noMatch') }}
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn-cancel" @click="close">取消</button>
-        <button class="btn-confirm" @click="confirm">确认选择</button>
+        <button class="btn-cancel" @click="close">{{ t('common.cancel') }}</button>
+        <button class="btn-confirm" @click="confirm">{{ t('condition.confirmSelection') }}</button>
       </div>
     </div>
   </div>

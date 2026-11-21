@@ -7,9 +7,26 @@
 import { invoke } from '@tauri-apps/api/core';
 import { onMounted, ref } from 'vue';
 import AboutPage from './AboutPage.vue';
-import { useMessage } from 'naive-ui';
+import { useMessage, NSelect, type SelectOption } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
+import { SUPPORTED_LOCALES, setLocale, type Locale } from '../i18n';
 
 const message = useMessage();
+const { t, locale } = useI18n();
+
+/** 语言选项 (名称按各自语言显示, 不随界面语言变化). */
+const languageOptions: SelectOption[] = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en',    label: 'English' },
+  { value: 'ja',    label: '日本語' },
+];
+
+/** 切换界面语言. */
+function onLocaleChange(value: string) {
+  if ((SUPPORTED_LOCALES as readonly string[]).includes(value)) {
+    setLocale(value as Locale);
+  }
+}
 
 const loading = ref(false);
 const data_dir = ref<string | null>(null);
@@ -32,7 +49,7 @@ onMounted(() => {
       data_dir.value = d;
       log_dir.value = l;
     } catch (e) {
-      message.error(`获取数据目录路径失败: ${e}`);
+      message.error(t('settings.error.loadPaths', { error: e }));
       data_dir.value = null;
       log_dir.value = null;
 
@@ -50,7 +67,7 @@ async function openDataDir() {
   try {
     await invoke('open_data_dir');
   } catch (e) {
-    message.error(`打开数据目录失败: ${e}`);
+    message.error(t('settings.error.openDataDir', { error: e }));
   } finally {
     dataDirOpening.value = false;
   }
@@ -62,7 +79,7 @@ async function openLogDir() {
   try {
     await invoke('open_log_dir');
   } catch (e) {
-    message.error(`打开日志目录失败: ${e}`);
+    message.error(t('settings.error.openLogDir', { error: e }));
   } finally {
     logDirOpening.value = false;
   }
@@ -74,42 +91,56 @@ async function openLogDir() {
     <!-- 设置视图 -->
     <Transition name="slide-settings">
       <div v-if="currentView === 'settings'" class="settings-page">
-        <span class="title">设置</span>
-        <span class="subtitle">应用偏好与数据管理</span>
+        <span class="title">{{ t('settings.title') }}</span>
+        <span class="subtitle">{{ t('settings.subtitle') }}</span>
 
         <div class="settings-list">
           <div class="setting-item">
-            <span class="setting-label">数据目录</span>
+            <span class="setting-label">{{ t('settings.language') }}</span>
             <span class="setting-value">
-              <span class="path-text">{{ data_dir ?? "加载中..." }}</span>
-              <button
-                v-if="log_dir"
-                class="open-btn"
-                :disabled="dataDirOpening"
-                @click="openDataDir"
-              >打开</button>
+              <n-select
+                :value="locale"
+                :options="languageOptions"
+                :consistent-menu-width="false"
+                size="small"
+                @update:value="onLocaleChange"
+              />
             </span>
           </div>
           <div class="setting-item">
-            <span class="setting-label">日志目录</span>
+            <span class="setting-label">{{ t('settings.dataDir') }}</span>
             <span class="setting-value">
-              <span class="path-text">{{ log_dir ?? "加载中..." }}</span>
+              <span class="path-text" :title="data_dir ?? ''">{{ data_dir ?? t('common.loading') }}</span>
+              <button
+                v-if="data_dir"
+                class="open-btn"
+                :disabled="dataDirOpening"
+                :title="data_dir ?? ''"
+                @click="openDataDir"
+              >{{ t('common.open') }}</button>
+            </span>
+          </div>
+          <div class="setting-item">
+            <span class="setting-label">{{ t('settings.logDir') }}</span>
+            <span class="setting-value">
+              <span class="path-text" :title="log_dir ?? ''">{{ log_dir ?? t('common.loading') }}</span>
               <button
                 v-if="log_dir"
                 class="open-btn"
                 :disabled="logDirOpening"
+                :title="log_dir ?? ''"
                 @click="openLogDir"
-              >打开</button>
+              >{{ t('common.open') }}</button>
             </span>
           </div>
           <div class="setting-item">
-            <span class="setting-label">深色模式</span>
-            <span class="setting-value">已启用</span>
+            <span class="setting-label">{{ t('settings.darkMode') }}</span>
+            <span class="setting-value">{{ t('settings.darkModeEnabled') }}</span>
           </div>
           <div class="setting-item clickable" @click="currentView = 'about'">
-            <span class="setting-label">关于</span>
+            <span class="setting-label">{{ t('settings.about') }}</span>
             <span class="setting-value">
-              项目简介与开源协议
+              {{ t('settings.aboutSummary') }}
               <span class="arrow">›</span>
             </span>
           </div>
@@ -229,6 +260,7 @@ async function openLogDir() {
   white-space: nowrap;
   display: inline-block;
   vertical-align: bottom;
+  direction: rtl;
 }
 
 .open-btn {

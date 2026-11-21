@@ -7,8 +7,10 @@
  */
 
 import { computed, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { WishResponse } from '../types';
 import { useTagStyles } from '../composables/useTagStyles';
+import { pickLocalized, useLocaleText } from '../composables/useLocaleText';
 
 const props = defineProps<{
   result: WishResponse | null,  // 单抽结果 (仅单抽时使用)
@@ -19,6 +21,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
 }>();
+
+const { t } = useI18n();
+const { currentLocale } = useLocaleText();
 
 const timerInterval = 2000;   // 点击提示出现的延迟时间
 
@@ -146,6 +151,11 @@ function getRarity(item: WishResponse): string {
   return tag ? tag.value : "unknown";
 }
 
+/** 卡片在当前界面语言下的显示内容. */
+function displayContent(item: WishResponse | null | undefined): string {
+  return item ? pickLocalized(item.content, currentLocale.value) : '';
+}
+
 // 单抽模式下的标签类名
 const singleTagClasses = computed(() => {
   if (!props.result) return [];
@@ -167,7 +177,7 @@ const currentTagClasses = computed(() => {
       <!-- 单抽 -->
       <template v-if="!isTenWish && result">
         <div class="card-content animate-in" @click.stop>
-          {{ result.content }}
+          {{ displayContent(result) }}
         </div>
         <div v-if="result.tags.length" class="tags" @click.stop>
           <span
@@ -195,7 +205,7 @@ const currentTagClasses = computed(() => {
             <Transition name="card-switch" mode="out-in">
               <div :key="currentIndex" class="card-wrapper">
                 <div class="card-content animate-in" @click.stop>
-                  {{ currentCard?.content }}
+                  {{ displayContent(currentCard) }}
                 </div>
                 <div v-if="currentCard?.tags.length" class="tags" @click.stop>
                   <span
@@ -220,22 +230,22 @@ const currentTagClasses = computed(() => {
           <div v-else-if="phase === 'summary'" key="summary">
             <div class="summary-stats" @click.stop>
               <div v-for="(count, rarity) in summaryStats" :key="rarity" class="stat-item" :class="`tag-rarity-${rarity}`">
-                Rarity {{ rarity }} : {{ count }}
+                {{ t('wish.rarity', { rarity, count }) }}
               </div>
             </div>
             <div class="summary-list" @click.stop>
               <div v-for="(item, idx) in tenResults" :key="idx" class="summary-item" :class="`tag-rarity-${getRarity(item)}`">
-                {{ item.content }}
+                {{ displayContent(item) }}
               </div>
             </div>
           </div>
         </Transition>
       </template>
       <div v-if="isTenWish && tenResults?.length && phase == 'playing'" class="skip-btn" @click.stop="handleSkip">
-        跳过 >
+        {{ t('wish.skip') }}
       </div>
-      <div v-if="showContinueHint" class="click-hint">点击空白处以继续</div>
-      <div v-if="showCloseHint" class="click-hint">点击空白处以关闭</div>
+      <div v-if="showContinueHint" class="click-hint">{{ t('wish.clickContinue') }}</div>
+      <div v-if="showCloseHint" class="click-hint">{{ t('wish.clickClose') }}</div>
     </div>
   </div>
 </template>

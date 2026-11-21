@@ -10,20 +10,23 @@
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import BottomNav from "./components/BottomNav.vue";
 import { useWish } from "./composables/useWish";
+import { pickLocalized } from "./composables/useLocaleText.ts";
 import type { WishResponse } from "./types.ts";
 import WishResultOverlay from "./components/WishResultOverlay.vue";
-import { GlobalThemeOverrides, NConfigProvider, darkTheme, NDialogProvider, NMessageProvider } from "naive-ui";
+import { GlobalThemeOverrides, NConfigProvider, darkTheme, NDialogProvider, NMessageProvider, createDiscreteApi } from "naive-ui";
 
 const {
   banners,
   currentBannerInfo,
   currentWish,
+  error,
   loadBanners,
   loadBannerInfo,
   doWish,
+  doWishTen,
 } = useWish();
 
-const selectedBannerId = ref<number | null>(null);
+const selectedBannerId = ref<string | null>(null);
 
 // 初始化加载
 loadBanners();
@@ -31,20 +34,20 @@ loadBanners();
 // 默认选中第一个卡池, 并加载信息
 watch(banners, (new_banners) => {
   if (new_banners.length > 0 && selectedBannerId.value === null) {
-    selectedBannerId.value = new_banners[0].id;
+    selectedBannerId.value = new_banners[0].global_id;
     loadBannerInfo(selectedBannerId.value);
   }
   scrollToActiveBannerTab();
 });
 
-function onSelectBanner(bannerId: number) {
-  selectedBannerId.value = bannerId;
-  loadBannerInfo(bannerId);
+function onSelectBanner(bannerGlobalId: string) {
+  selectedBannerId.value = bannerGlobalId;
+  loadBannerInfo(bannerGlobalId);
   navigateTo("gacha");
 }
 
-async function onBannerChanged(id: number) {
-  selectedBannerId.value = id;
+async function onBannerChanged(bannerGlobalId: string) {
+  selectedBannerId.value = bannerGlobalId;
   await loadBannerInfo(selectedBannerId.value)
   scrollToActiveBannerTab();
 }
@@ -79,26 +82,19 @@ async function handleWishSingle() {
     isTenWish.value = false;
     showWishResultOverlay.value = true;
   } catch (e) {
-    // 无额外处理
-    // TODO: 提示弹窗
+    discreteMessage.error(error.value ?? String(e));
   }
 }
 
-/** 十连处理 (顺序执行, 后续优化为并行执行) */
+/** 十连处理 (后端批量执行) */
 async function handleWishTen() {
   if (!selectedBannerId.value) return;
   try {
-    // 循环十次
-    // TODO: 并行接口
-    tenWishResults.value = [];
-    for (let i = 0; i < 10; i++) {
-      const result = await doWish(selectedBannerId.value);
-      tenWishResults.value.push(result);
-    }
+    tenWishResults.value = await doWishTen(selectedBannerId.value);
     isTenWish.value = true;
     showWishResultOverlay.value = true;
   } catch (e) {
-    // TODO: 提示弹窗
+    discreteMessage.error(error.value ?? String(e));
   }
 }
 
@@ -131,7 +127,6 @@ const currentPageComponent = computed(() => pageMap[currentPage.value]);
 function navigateTo(page: string) {
   currentPage.value = page;
 }
-
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -169,6 +164,11 @@ const themeOverrides: GlobalThemeOverrides = {
     },
   },
 };
+
+/** 独立提示 API (App 根组件不在 NMessageProvider 上下文内) */
+const { message: discreteMessage } = createDiscreteApi(['message'], {
+  configProviderProps: { theme: darkTheme, themeOverrides },
+});
 </script>
 
 
@@ -183,12 +183,12 @@ const themeOverrides: GlobalThemeOverrides = {
               <div v-if="isGachaPage" class="banner-tabs">
                 <div
                   v-for="b in banners"
-                  :key="b.id"
+                  :key="b.global_id"
                   class="banner-tab"
-                  :class="{ active: selectedBannerId === b.id }"
-                  @click="onBannerChanged(b.id)"
+                  :class="{ active: selectedBannerId === b.global_id }"
+                  @click="onBannerChanged(b.global_id)"
                 >
-                  {{ b.name }}
+                  {{ pickLocalized(b.name) }}
                 </div>
               </div>
             </div>

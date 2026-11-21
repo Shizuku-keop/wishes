@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useDeckManager } from '../../composables/useDeckManager';
 import DeckEditor from '../deck/DeckEditor.vue';
 import { useDialog, useMessage } from 'naive-ui';
+import { originLabel, pickLocalized, shortGlobalId } from '../../composables/useLocaleText.ts';
 
 const {
   decks,
@@ -12,11 +14,14 @@ const {
   create,
   update,        // 更新方法
   remove,        // 删除方法
+  displayName,
   error,
 } = useDeckManager();
 
+const { t } = useI18n();
+
 // 编辑状态
-const editingDeckId = ref<number | null>(null);
+const editingDeckId = ref<string | null>(null);
 const isCreating = ref(false);
 
 const isEditorOpen = computed(() => editingDeckId.value !== null || isCreating.value);
@@ -26,13 +31,13 @@ const message = useMessage();
 
 const currentDeck = computed(() => {
   if (editingDeckId.value === null) return null;
-  return decks.value.find(d => d.id === editingDeckId.value) ?? null;
+  return decks.value.find(d => d.global_id === editingDeckId.value) ?? null;
 });
 
 // 开始编辑
-function handleEdit(deckId: number) {
+function handleEdit(deckGlobalId: string) {
   isCreating.value = false;
-  editingDeckId.value = deckId;
+  editingDeckId.value = deckGlobalId;
 }
 
 function handleCreate() {
@@ -55,7 +60,7 @@ async function handleSave(data: any) {
     }
   } else if (editingDeckId.value !== null) {
     const result = await update({
-      id: editingDeckId.value,
+      global_id: editingDeckId.value,
       name: data.name,
       tags: data.tags,
       members: data.members,
@@ -75,19 +80,19 @@ function handleCancel() {
 }
 
 // 删除确认（原有）
-async function handleDelete(deckId: number) {
+async function handleDelete(deckGlobalId: string) {
   dialog.warning({
-    title: '确认删除',
-    content: '确认删除该卡组吗?',
-    positiveText: '确认删除',
-    negativeText: '取消',
+    title: t('deck.deleteConfirmTitle'),
+    content: t('deck.deleteConfirmContent'),
+    positiveText: t('deck.deleteConfirmTitle'),
+    negativeText: t('common.cancel'),
     onPositiveClick: async () => {
-      const success = await remove(deckId);
+      const success = await remove(deckGlobalId);
       if (!success) {
-        message.error(error.value ?? "卡组删除失败");
+        message.error(error.value ?? t('deck.deleteFailed'));
         return false;
       }
-      message.success("删除成功");
+      message.success(t('deck.deleteSuccess'));
     },
     positiveButtonProps: {
       color: '#e74c3c',
@@ -111,30 +116,35 @@ onMounted(() => {
           <div class="search-wrapper">
             <input 
               v-model="searchQuery"
-              placeholder="搜索卡组..."
+              :placeholder="t('deck.searchPlaceholder')"
               class="search-input"
             />
             <div class="filtered-deck-counter">
-              总数 {{ filteredDecks.length }} / {{ decks.length }}
+              {{ t('deck.totalCounter', { filtered: filteredDecks.length, total: decks.length }) }}
             </div>
           </div>
-          <button class="btn-create" @click="handleCreate">+ 新建卡组</button>
+          <button class="btn-create" @click="handleCreate">{{ t('deck.create') }}</button>
         </div>
 
         <div class="main-body">
           <div class="deck-list">
             <div
               v-for="deck in filteredDecks"
-              :key="deck.id"
+              :key="deck.global_id"
               class="deck-item"
             >
               <div class="deck-info">
-                <div class="deck-id-name">
-                  <div class="deck-id">ID {{ deck.id }}</div>
-                  <div class="deck-name">{{ deck.name }}</div>
+                <div class="deck-name-info">
+                  <div class="deck-name">{{ displayName(deck) }}</div>
+                  <span class="origin-badge" :class="`origin-${deck.origin}`">
+                    {{ originLabel(t, deck.origin) }}
+                  </span>
+                </div>
+                <div v-if="deck.forked_from" class="deck-fork-hint">
+                  {{ t('deck.forkedFrom', { name: pickLocalized(deck.forked_from_name) || shortGlobalId(deck.forked_from) }) }}
                 </div>
                 <div class="deck-tags">
-                  <span v-if="deck.tags && deck.tags.length === 0" class="no-tags">无标签</span>
+                  <span v-if="deck.tags && deck.tags.length === 0" class="no-tags">{{ t('deck.noTags') }}</span>
                   <span
                     v-for="tag in deck.tags"
                     :key="`${tag.namespace}:${tag.value}`"
@@ -145,8 +155,8 @@ onMounted(() => {
                 </div>
               </div>
               <div class="deck-actions">
-                <button class="action-btn edit-btn" @click="handleEdit(deck.id)">编辑</button>
-                <button class="action-btn delete-btn" @click="handleDelete(deck.id)">删除</button>
+                <button class="action-btn edit-btn" @click="handleEdit(deck.global_id)">{{ t('deck.edit') }}</button>
+                <button v-if="deck.origin === 'local'" class="action-btn delete-btn" @click="handleDelete(deck.global_id)">{{ t('deck.delete') }}</button>
               </div>
             </div>
           </div>
@@ -281,27 +291,19 @@ onMounted(() => {
   flex: 0 0 30%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   flex: 1;
   min-width: 0; /* 防止溢出 */
 }
 
-.deck-id-name {
+.deck-name-info {
   display: flex;
   flex-direction: row;
   gap: 12px;
   align-items: center;
 }
 
-.deck-id {
-  background: #4b7ac1;
-  text-align: center;
-  color: #fff;
-  font-size: 1.2rem;
-  letter-spacing: 0.3px;
-  padding: 3px 8px 3px 10px;
-  border-radius: 100px 100px 100px 100px;
-}
+
 
 .deck-name {
   font-size: 1.5rem;
@@ -310,6 +312,28 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.origin-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #8a99b4;
+  font-size: 1.3rem;
+  white-space: nowrap;
+}
+.origin-official {
+  background: rgba(79, 110, 247, 0.2);
+  color: #9db2ff;
+}
+.origin-local {
+  background: rgba(80, 200, 120, 0.18);
+  color: #7fd8a0;
+}
+
+.deck-fork-hint {
+  color: #6a7a90;
+  font-size: 1.3rem;
 }
 
 .deck-tags {
@@ -349,7 +373,7 @@ onMounted(() => {
   padding: 4px 14px;
   font-size: 1.2rem;
   cursor: pointer;
-  /* transition: background 0.2s, transform 0.1s; */
+  transition: background 0.1s, transform 0.1s;
   white-space: nowrap;
   font-weight: bold;
 }

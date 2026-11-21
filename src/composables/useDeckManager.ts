@@ -1,5 +1,7 @@
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { createDeck, CreateDeckRequest, DeckSummary, deleteDeck, listDecks, updateDeck, UpdateDeckRequest } from "../api/decks";
+import { allLocalizedValues, pickLocalized, useLocaleText } from "./useLocaleText";
 
 
 export function useDeckManager() {
@@ -7,19 +9,28 @@ export function useDeckManager() {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
+  const { t } = useI18n();
+  const { currentLocale } =  useLocaleText();
+
   const searchQuery = ref("");
   const filteredDecks = computed(() => {
     let result = decks.value;
 
+    // 文本搜索: 命中任意一种语言的名称都算匹配
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLocaleLowerCase();
       result = decks.value.filter(deck => 
-        deck.name.toLocaleLowerCase().includes(q)
+        allLocalizedValues(deck.name).some(text => text.toLocaleLowerCase().includes(q))
       )
     }
 
     return result
   });
+
+  /** 卡组在当前界面语言下的显示名 (缺失时回退到默认语言). */
+  function displayName(deck: DeckSummary): string {
+    return pickLocalized(deck.name, currentLocale.value);
+  }
 
   // 获取卡片使用的所有标签可以直接使用 useCardManager 的 allUsedTags
 
@@ -27,17 +38,17 @@ export function useDeckManager() {
     loading.value = true;
     error.value = null;
     try {
-      const loaded = await listDecks();
-      decks.value = loaded.sort((a, b) => b.id - a.id);
+      // Uuid v7 时间有序, 后端已排好
+      decks.value = await listDecks();
     } catch (e) {
-      error.value = `Deck 加载失败: ${e}`;
+      error.value = t("deck.loadFailed", { error: e });
     } finally {
       loading.value = false;
     }
   }
 
-  function getDeckById(id: number): DeckSummary | undefined {
-    return decks.value.find(d => d.id === id);
+  function getDeckById(globalId: string): DeckSummary | undefined {
+    return decks.value.find(d => d.global_id === globalId);
   }
 
   async function create(req: CreateDeckRequest): Promise<DeckSummary | null> {
@@ -48,7 +59,7 @@ export function useDeckManager() {
       decks.value.unshift(newDeck);
       return newDeck
     } catch (e) {
-      error.value = `创建 Deck 失败: ${e}`;
+      error.value = t("deck.createFailed", { error: e });
       return null;
     } finally {
       loading.value = false;
@@ -60,28 +71,32 @@ export function useDeckManager() {
     error.value = null;
     try {
       const updated = await updateDeck(req);
-      const index = decks.value.findIndex(d => d.id === req.id);
+      const index = decks.value.findIndex(d => d.global_id === req.global_id);
       if (index !== -1) {
         decks.value[index] = updated;
+      } else {
+        // 从只读来源分叉新 global_id
+        decks.value.unshift(updated);
       }
       return updated;
     } catch (e) {
-      error.value = `更新 Deck 失败: ${e}`;
+      error.value = t("deck.updateFailed", { error: e });
       return null;
     } finally {
       loading.value = false;
     }
   }
 
-  async function remove(id: number): Promise<boolean> {
+  async function remove(globalId: string): Promise<boolean> {
     loading.value = true;
     error.value = null;
     try {
-      await deleteDeck(id);
-      decks.value = decks.value.filter(d => d.id !== id);
+      await deleteDeck(globalId);
+      await loadDecks();
+      // decks.value = decks.value.filter(d => d.global_id !== globalId);
       return true;
     } catch (e) {
-      error.value = `删除 Deck 失败: ${e}`;
+      error.value = t("deck.deleteError", { error: e });
       return false;
     } finally {
       loading.value = false;
@@ -94,6 +109,7 @@ export function useDeckManager() {
     filteredDecks,
     loading,
     error,
+    displayName,
     loadDecks,
     getDeckById,
     create,

@@ -1,19 +1,30 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Tag } from '../types';
+import { useI18n } from 'vue-i18n';
+import { LocalizedString, Tag } from '../types';
+import LocalizedInput from './common/LocalizedInput.vue';
 
 const props = defineProps<{
-  initialContent?: string;
-  initialTags?: Tag[];
-  existingTags?: Tag[]; // 所有已使用的标签（用于可选列表）
+  initialContent?: LocalizedString,
+  initialTitle?: LocalizedString,
+  initialTags?: Tag[],
+  existingTags?: Tag[], // 所有已使用的标签（用于可选列表）
 }>();
 
 const emit = defineEmits<{
-  (e: 'change', data: { content: string; tags: Tag[] }): void;
+  (e: 'change', data: {
+    content: LocalizedString,
+    title: LocalizedString,
+    tags: Tag[],
+    valid: boolean
+  }): void;
 }>();
 
+const { t } = useI18n();
+
 // 表单数据
-const localContent = ref(props.initialContent || '');
+const localContent = ref<LocalizedString>({ ...(props.initialContent ?? {}) });
+const localTitle = ref<LocalizedString>({ ...(props.initialTitle ?? {}) });
 const localTags = ref<Tag[]>([...(props.initialTags || [])]);
 
 // 新建标签输入
@@ -77,37 +88,52 @@ function addAvailableTag(tag: Tag) {
 }
 
 // 监听变化通知父组件
-watch([localContent, localTags], () => {
+watch([localContent, localTitle, localTags], () => {
   emit('change', {
-    content: localContent.value,
+    content: { ...localContent.value },
+    title: Object.keys(localTitle.value).length ? { ...localTitle.value } : {},
     tags: localTags.value,
+    valid: Object.values(localContent.value).some(v => v.trim().length > 0),
   });
-}, { deep: true });
+}, { deep: true, immediate: true });
+
+const nameValid = computed(() => 
+  Object.values(localContent.value).some(v => v.trim().length > 0)
+)
 </script>
 
 <template>
   <div class="card-form">
-    <!-- 名称（单行） -->
+    <!-- 各语言名称 -->
     <div class="form-group">
-      <label>名称</label>
-      <input v-model="localContent" placeholder="输入卡片名称" class="form-input" />
+      <label>
+        {{ t('card.name') }}
+        <span v-if="!nameValid" class="required-hint">{{ t('card.nameRequired') }}</span>
+      </label>
+      <LocalizedInput v-model="localContent" :placeholder="t('card.namePlaceholder')" />
+    </div>
+
+    <!-- 各语言称号 (可选) -->
+    <div class="form-group">
+      <label>{{ t('card.title') }}</label>
+      <LocalizedInput v-model="localTitle" :placeholder="t('card.titlePlaceholder')" />
     </div>
 
     <!-- 已选标签 -->
     <div class="form-group">
-      <label>标签</label>
+      <label>{{ t('card.tags') }}</label>
       <div class="selected-tags">
         <span v-for="tag in localTags" :key="`${tag.namespace}:${tag.value}`" class="tag-item">
           {{ tag.namespace }}: {{ tag.value }}
           <button class="tag-remove" @click="removeTag(tag)">✕</button>
         </span>
-        <span v-if="localTags.length === 0" class="no-tags">暂无标签</span>
+        <span v-if="localTags.length === 0" class="no-tags">{{ t('card.noTags') }}</span>
       </div>
     </div>
 
     <!-- 可选标签（按命名空间分组，横向滚动） -->
     <div class="form-group" v-if="availableTagsGrouped.length > 0">
-      <label>可选标签</label>
+      <label>{{ t('card.availableTags') }}</label>
       <div class="available-tags-wrapper">
         <div v-for="group in availableTagsGrouped" :key="group.namespace" class="tag-group">
           <span class="group-label">{{ group.namespace }}</span>
@@ -127,22 +153,22 @@ watch([localContent, localTags], () => {
 
     <!-- 新建标签 -->
     <div class="form-group">
-      <label>新建标签</label>
+      <label>{{ t('card.newTag') }}</label>
       <div class="new-tag-row">
         <input
           v-model="newNamespace"
-          placeholder="命名空间"
+          :placeholder="t('card.namespacePlaceholder')"
           class="new-tag-input ns"
           @keydown.enter="addTag"
         />
         <span class="sep">:</span>
         <input
           v-model="newValue"
-          placeholder="值"
+          :placeholder="t('card.valuePlaceholder')"
           class="new-tag-input value"
           @keydown.enter="addTag"
         />
-        <button class="btn-add-tag" @click="addTag">+ 添加</button>
+        <button class="btn-add-tag" @click="addTag">{{ t('card.addTag') }}</button>
       </div>
     </div>
   </div>
@@ -166,7 +192,33 @@ watch([localContent, localTags], () => {
   color: #b0c0d0;
 }
 
+.required-hint {
+  margin-left: 5px;
+  font-size: 1.2rem;
+  color: #e74c3c;
+}
+
+/* 多语言输入行 */
+.locale-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.locale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.locale-label {
+  flex: 0 0 68px;
+  font-size: 1.1rem;
+  color: #6a7a90;
+  text-align: right;
+  user-select: none;
+}
+
 .form-input {
+  flex: 1;
   background: #0b0e14;
   border: none;
   border-bottom: 3px solid #2a3340;
